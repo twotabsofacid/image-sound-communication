@@ -1,22 +1,40 @@
+import { PitchDetector } from 'https://esm.sh/pitchy@4';
+
 class Receiver {
   constructor() {
     console.log('hello world');
-    console.log(Wad);
-    const textView = document.getElementById('text');
-    var voice = new Wad({ source: 'mic' }); // At this point, your browser will ask for permission to access your microphone.
-    var tuner = new Wad.Poly();
-    tuner.setVolume(0); // If you're not using headphones, you can eliminate microphone feedback by muting the output from the tuner.
-    tuner.add(voice);
+    this.pitchArr = [];
+    this.runAnalyzer();
+  }
+  runAnalyzer() {
+    const audioContext = new window.AudioContext();
+    const analyserNode = audioContext.createAnalyser();
+    audioContext.resume();
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      audioContext.createMediaStreamSource(stream).connect(analyserNode);
+      const detector = PitchDetector.forFloat32Array(analyserNode.fftSize);
+      const input = new Float32Array(detector.inputLength);
+      this.updatePitch(analyserNode, detector, input, audioContext.sampleRate);
+    });
+  }
+  updatePitch(analyserNode, detector, input, sampleRate) {
+    analyserNode.getFloatTimeDomainData(input);
+    const [pitch, clarity] = detector.findPitch(input, sampleRate);
 
-    voice.play(); // You must give your browser permission to access your microphone before calling play().
-
-    tuner.updatePitch(); // The tuner is now calculating the pitch and note name of its input 60 times per second. These values are stored in <code>tuner.pitch</code> and <code>tuner.noteName</code>.
-    Tone.Transport.scheduleRepeat((time) => {
-      console.log(tuner.pitch, tuner.noteName);
-      // requestAnimationFrame(logPitch);
-      textView.innerText = tuner.noteName;
-    }, '4n');
-    Tone.Transport.start();
+    document.getElementById('pitch').textContent = `${
+      Math.round(pitch * 10) / 10
+    } Hz`;
+    document.getElementById('clarity').textContent = `${Math.round(
+      clarity * 100
+    )} %`;
+    if (clarity >= 0.99) {
+      this.pitchArr.push(Math.round(pitch * 10) / 10);
+    }
+    console.log(this.pitchArr);
+    window.setTimeout(
+      () => this.updatePitch(analyserNode, detector, input, sampleRate),
+      100
+    );
   }
 }
 
